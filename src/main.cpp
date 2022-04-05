@@ -1439,10 +1439,11 @@ void checker()
   if(q_boiler || !q_solar)
   runtime++;
 
-  if(runtime > (valve_config.time * CHECK_TIME ) )
+  if((runtime * CHECK_TIME) / 1000 > valve_config.time  ) //if runtime is exceeded
   {
-    q_boiler = false;
-    q_solar = false;
+    q_boiler = false; //reset boiler actuator
+    q_solar = false; //reset solar actuator
+    runtime = 0; //reset runtime for next drive
   }
 
   sensors.requestTemperatures();

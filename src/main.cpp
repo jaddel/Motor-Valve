@@ -69,7 +69,7 @@
 #define RLY_ON  LOW
 #define RLY_OFF HIGH
 
-#define CHECK_TIME //periodical check time in ms
+#define CHECK_TIME 500 //periodical check time in ms
 
 bool i_boiler;
 bool i_solar;
@@ -1439,7 +1439,7 @@ void checker()
   if(q_boiler || !q_solar)
   runtime++;
 
-  if(runtime > valve_config.time * CHECK_TIME)
+  if(runtime > (valve_config.time * CHECK_TIME ) )
   {
     q_boiler = false;
     q_solar = false;

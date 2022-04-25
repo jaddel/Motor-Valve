@@ -937,6 +937,12 @@ for (uint8_t i = 0; i < request->args(); i++)
   page += "</tr>";
 
   page += "<tr>";
+  page += "<td rowspan=2>";
+  page += "Description: ";
+  page += "</td>";
+  page += "</tr>";
+
+  page += "<tr>";
   page += "<td>";
   page += "<input type=\"submit\" value=\"Save\"> ";
   page += "</td>";
@@ -1453,7 +1459,7 @@ void loop()
 void checker()
 {
 
-  if( (q_boiler || !q_solar) && (runtime * CHECK_TIME) / 1000 > valve_config.time)
+  if( (q_boiler || !q_solar) && (runtime * CHECK_TIME) / 1000 <= valve_config.time)
   runtime++;
 
   sensors.requestTemperatures();

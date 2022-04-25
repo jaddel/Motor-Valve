@@ -880,19 +880,19 @@ for (uint8_t i = 0; i < request->args(); i++)
   page += "<tr>";
 
   page += "<td>";
-  page += "Boiler Temperature: ";
+  page += "Boiler Temperature: [C]";
   page += "</td>";
   
   page += "<td>";
   page += String(boiler_temp) ;
-  page += "C </td>";
+  page += "</td>";
 
   page += "</tr>";
   page += "<tr>";
 
   page += "<td>";
-  page += "Solar Temperature: ";
-  page += "C </td>";
+  page += "Solar Temperature: [C]";
+  page += "</td>";
   
   page += "<td>";
   page += String(solar_temp) ;
@@ -903,18 +903,20 @@ for (uint8_t i = 0; i < request->args(); i++)
   page += "<tr>";
 
   page += "<td>";
-  page += "Time: [s]";
+  page += "max. runtime: [s]";
   page += "</td>";
   
   page += "<td>";
   page += "<input type=\"number\" name=\"time\" value=\"" + String(valve_config.time) + "\">";
+  page += "Last: ";
+  page += runtime;
   page += "</td>";
 
   page += "</tr>";
   page += "<tr>";
 
   page += "<td>";
-  page += "Solar Limit Temperature: [C]";
+  page += "Solar limit temperature: [C]";
   page += "</td>";
   
   page += "<td>";
@@ -925,7 +927,7 @@ for (uint8_t i = 0; i < request->args(); i++)
   page += "<tr>";
 
   page += "<td>";
-  page += "Offset: [C]";
+  page += "Offset temperature: [C]";
   page += "</td>";
 
   page += "<td>";

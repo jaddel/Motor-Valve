@@ -937,8 +937,11 @@ for (uint8_t i = 0; i < request->args(); i++)
   page += "</tr>";
 
   page += "<tr>";
-  page += "<td rowspan=2>";
-  page += "Description: Valve changes to Solar mode if the Solar temperature exceeds the boiler temperature or ";
+  page += "<td colspan=2>";
+  page += "Description: <ul><li>Valve changes to Solar mode if the Solar temperature exceeds the boiler temperature by the offset temperaure</li>";
+  page += "<li>Valve changes to Solar mode if the Solar temperature exceeds solar limit temperature by the offset temperature</li>";
+  page += "<li>Valve changes to Boiler mode if the solar temperature is below the solar limit temperature and below the boiler temperature</li>";
+  page += "</ul>";
   page += "</td>";
   page += "</tr>";
 
@@ -1413,12 +1416,12 @@ void loop()
   //Switch logic
   if(!manual_mode)
   {
-    if(solar_temp + valve_config.offset   > boiler_temp || solar_temp + valve_config.offset   > valve_config.limit)
+    if(solar_temp + valve_config.offset > boiler_temp || solar_temp + valve_config.offset > valve_config.limit)
     {
     q_boiler = false;
     q_solar = true;
     }
-    else
+    else if( solar_temp < boiler_temp && solar_temp < valve_config.limit )
     {
     q_solar = false;
     q_boiler = true;

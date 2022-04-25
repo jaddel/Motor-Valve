@@ -91,6 +91,8 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress solarThermometer = { 0x28, 0x39, 0x24, 0xEB, 0x4C, 0x20, 0x1, 0x4A }; //blue mark on device
 DeviceAddress boilerThermometer = { 0x28, 0xCB, 0x2B, 0x28, 0x37, 0x19, 0x1, 0x39 }; //red mark on devide
 
+const char WM_HTTP_HEAD_CFG[] PROGMEM     = "<!DOCTYPE html><html lang='en'><head><meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'/><META HTTP-EQUIV='refresh' CONTENT='1; URL=?' /><title>{v}</title>";
+
 //Ported to ESP32
 #ifdef ESP32
   #include <esp_wifi.h>
@@ -766,8 +768,8 @@ void handleWWWApp( AsyncWebServerRequest *request ){
   bool news = false;
 
   LOGDEBUG(F("Answer any"));
-
-  String page = FPSTR(WM_HTTP_HEAD_START);
+  
+  String page = FPSTR(WM_HTTP_HEAD_CFG);
   page.replace("{v}", "Options");
   page += FPSTR(WM_HTTP_SCRIPT);
   page += FPSTR(WM_HTTP_SCRIPT_NTP);
@@ -803,7 +805,10 @@ for (uint8_t i = 0; i < request->args(); i++)
     manual_mode = true;
 
     if(request->argName(i) == "auto")
+    {
     manual_mode = false;
+    runtime = 0;
+    }
 
     if(request->argName(i) == "manboiler")
     {

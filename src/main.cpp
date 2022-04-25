@@ -1462,7 +1462,7 @@ void loop()
 void checker()
 {
 
-  if( (q_boiler || !q_solar) && (runtime * CHECK_TIME) / 1000 <= valve_config.time)
+  if( (q_boiler || q_solar) && (runtime * CHECK_TIME) / 1000 <= valve_config.time)
   runtime++;
 
   sensors.requestTemperatures();

@@ -909,7 +909,7 @@ for (uint8_t i = 0; i < request->args(); i++)
   page += "<td>";
   page += "<input type=\"number\" name=\"time\" value=\"" + String(valve_config.time) + "\">";
   page += "Last: ";
-  page += runtime;
+  page += (runtime * CHECK_TIME) / 1000;
   page += "</td>";
 
   page += "</tr>";
@@ -938,7 +938,7 @@ for (uint8_t i = 0; i < request->args(); i++)
 
   page += "<tr>";
   page += "<td rowspan=2>";
-  page += "Description: ";
+  page += "Description: Valve changes to Solar mode if the Solar temperature exceeds the boiler temperature or ";
   page += "</td>";
   page += "</tr>";
 
@@ -1427,12 +1427,12 @@ void loop()
 
   if(i_boiler){ // End position reached
   q_boiler = false;
-  runtime = 0;
+  //runtime = 0;
   }
 
   if(i_solar){ //End position reached
   q_solar = false;
-  runtime = 0;
+  //runtime = 0;
   }
 
   if((runtime * CHECK_TIME) / 1000 > valve_config.time  ) //if runtime is exceeded

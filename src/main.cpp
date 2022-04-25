@@ -809,18 +809,21 @@ for (uint8_t i = 0; i < request->args(); i++)
     {
     q_boiler = true;
     q_solar = false;
+    runtime = 0;
     }
 
     if(request->argName(i) == "mansolar")
     {
     q_boiler = false;
     q_solar = true;
+    runtime = 0;
     }
 
     if(request->argName(i) == "manstop")
     {
     q_boiler = false;
     q_solar = false;
+    runtime = 0;
     }
 
   }
@@ -1414,11 +1417,23 @@ void loop()
     }
   }
 
-  if(i_boiler) // End position reached
+  if(i_boiler){ // End position reached
   q_boiler = false;
+  runtime = 0;
+  }
 
-  if(i_solar) //End position reached
+  if(i_solar){ //End position reached
   q_solar = false;
+  runtime = 0;
+  }
+
+  if((runtime * CHECK_TIME) / 1000 > valve_config.time  ) //if runtime is exceeded
+  {
+    q_boiler = false; //reset boiler actuator
+    q_solar = false; //reset solar actuator
+  }
+
+
 
   //Interlock
   if(q_boiler && !q_solar)
@@ -1436,15 +1451,8 @@ void loop()
 void checker()
 {
 
-  if(q_boiler || !q_solar)
+  if( (q_boiler || !q_solar) && (runtime * CHECK_TIME) / 1000 > valve_config.time)
   runtime++;
-
-  if((runtime * CHECK_TIME) / 1000 > valve_config.time  ) //if runtime is exceeded
-  {
-    q_boiler = false; //reset boiler actuator
-    q_solar = false; //reset solar actuator
-    runtime = 0; //reset runtime for next drive
-  }
 
   sensors.requestTemperatures();
 

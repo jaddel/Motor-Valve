@@ -1,7 +1,5 @@
 /****************************************************************************************************************************
-  Async_ConfigOnDoubleReset.ino
-  For ESP8266 / ESP32 boards
-
+  
   ESPAsync_WiFiManager is a library for the ESP8266/Arduino platform, using (ESP)AsyncWebServer to enable easy
   configuration and reconfiguration of WiFi credentials using a Captive Portal.
 
@@ -31,11 +29,6 @@
    Settings
    There are two values to be set in the sketch.
 
-   DRD_TIMEOUT - Number of seconds to wait for the second reset. Set to 10 in the example.
-   DRD_ADDRESS - The address in ESP8266 RTC RAM to store the flag. This memory must not be used for other purposes in the same sketch. Set to 0 in the example.
-
-   This example, originally relied on the Double Reset Detector library from https://github.com/datacute/DoubleResetDetector
-   To support ESP32, use ESP_DoubleResetDetector library from //https://github.com/khoih-prog/ESP_DoubleResetDetector
  *****************************************************************************************************************************/
 
 #if !( defined(ESP8266) ||  defined(ESP32) )
@@ -49,19 +42,37 @@
 #define _ESPASYNC_WIFIMGR_LOGLEVEL_    1
 
 #include <FS.h>
+//#include <SPI.h>
+
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 //One Wire Dallas Temperature
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include <TaskScheduler.h>
+
+// For a connection via I2C using the Arduino Wire include:
+//#include <Wire.h>               // Only needed for Arduino 1.6.5 and earlier
+
+
+
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 26
 #define RELAIS_BOILER 16
-#define RELAIS_SOLAR 17
+#define RELAIS_SOLAR 4
 #define FEEDBACK_BOILER 33
 #define FEEDBACK_SOLAR 14
+#define SDA_PIN 21
+#define SCL_PIN 17
 
-#define LED_BUILTIN       2
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+
+const int PIN_LED = 2; // D4 on NodeMCU and WeMos. GPIO2/ADC12 of ESP32. Controls the onboard LED.
 
 #define LED_ON            HIGH
 #define LED_OFF           LOW
@@ -79,7 +90,12 @@ bool q_solar = false;
 bool manual_mode = false;
 uint16_t runtime = 0;
 
+// arrays to hold device addresses
+DeviceAddress solarThermometer = { 0x28, 0x39, 0x24, 0xEB, 0x4C, 0x20, 0x1, 0x4A }; //blue mark on device
+DeviceAddress boilerThermometer = { 0x28, 0xCB, 0x2B, 0x28, 0x37, 0x19, 0x1, 0x39 }; //red mark on devide
 
+//Display
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
@@ -87,14 +103,10 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
-// arrays to hold device addresses
-DeviceAddress solarThermometer = { 0x28, 0x39, 0x24, 0xEB, 0x4C, 0x20, 0x1, 0x4A }; //blue mark on device
-DeviceAddress boilerThermometer = { 0x28, 0xCB, 0x2B, 0x28, 0x37, 0x19, 0x1, 0x39 }; //red mark on devide
-
 const char WM_HTTP_HEAD_CFG[] PROGMEM     = "<!DOCTYPE html><html lang='en'><head><meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'/><META HTTP-EQUIV='refresh' CONTENT='1; URL=?' /><title>{v}</title>";
 
 //Ported to ESP32
-#ifdef ESP32
+
   #include <esp_wifi.h>
   #include <WiFi.h>
   #include <WiFiClient.h>
@@ -158,102 +170,8 @@ const char WM_HTTP_HEAD_CFG[] PROGMEM     = "<!DOCTYPE html><html lang='en'><hea
     #define FileFS        FFat
     #define FS_Name       "FFat"
   #endif
-  //////
 
   #define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
-
-
-
-#else
-
-  #include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
-  //needed for library
-  #include <DNSServer.h>
-
-  // From v1.1.1
-  #include <ESP8266WiFiMulti.h>
-  ESP8266WiFiMulti wifiMulti;
-
-  #define USE_LITTLEFS      true
-  
-  #if USE_LITTLEFS
-    #include <LittleFS.h>
-    FS* filesystem =      &LittleFS;
-    #define FileFS        LittleFS
-    #define FS_Name       "LittleFS"
-  #else
-    FS* filesystem =      &SPIFFS;
-    #define FileFS        SPIFFS
-    #define FS_Name       "SPIFFS"
-  #endif
-  //////
-  
-  #define ESP_getChipId()   (ESP.getChipId())
-  
-  #define LED_ON      LOW
-  #define LED_OFF     HIGH
-#endif
-
-// These defines must be put before #include <ESP_DoubleResetDetector.h>
-// to select where to store DoubleResetDetector's variable.
-// For ESP32, You must select one to be true (EEPROM or SPIFFS)
-// For ESP8266, You must select one to be true (RTC, EEPROM, SPIFFS or LITTLEFS)
-// Otherwise, library will use default EEPROM storage
-#ifdef ESP32
-
-  // These defines must be put before #include <ESP_DoubleResetDetector.h>
-  // to select where to store DoubleResetDetector's variable.
-  // For ESP32, You must select one to be true (EEPROM or SPIFFS)
-  // Otherwise, library will use default EEPROM storage
-  #if USE_LITTLEFS
-    #define ESP_DRD_USE_LITTLEFS    true
-    #define ESP_DRD_USE_SPIFFS      false
-    #define ESP_DRD_USE_EEPROM      false
-  #elif USE_SPIFFS
-    #define ESP_DRD_USE_LITTLEFS    false
-    #define ESP_DRD_USE_SPIFFS      true
-    #define ESP_DRD_USE_EEPROM      false
-  #else
-    #define ESP_DRD_USE_LITTLEFS    false
-    #define ESP_DRD_USE_SPIFFS      false
-    #define ESP_DRD_USE_EEPROM      true
-  #endif
-
-#else //ESP8266
-
-  // For DRD
-  // These defines must be put before #include <ESP_DoubleResetDetector.h>
-  // to select where to store DoubleResetDetector's variable.
-  // For ESP8266, You must select one to be true (RTC, EEPROM, SPIFFS or LITTLEFS)
-  // Otherwise, library will use default EEPROM storage
-  #if USE_LITTLEFS
-    #define ESP_DRD_USE_LITTLEFS    true
-    #define ESP_DRD_USE_SPIFFS      false
-  #else
-    #define ESP_DRD_USE_LITTLEFS    false
-    #define ESP_DRD_USE_SPIFFS      true
-  #endif
-  
-  #define ESP_DRD_USE_EEPROM      false
-  #define ESP8266_DRD_USE_RTC     false
-#endif
-
-#define DOUBLERESETDETECTOR_DEBUG       true  //false
-
-#include <ESP_DoubleResetDetector.h>      //https://github.com/khoih-prog/ESP_DoubleResetDetector
-
-// Number of seconds after reset during which a
-// subseqent reset will be considered a double reset.
-#define DRD_TIMEOUT 10
-
-// RTC Memory Address for the DoubleResetDetector to use
-#define DRD_ADDRESS 0
-
-//DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
-DoubleResetDetector* drd;//////
-
-// Onboard LED I/O pin on NodeMCU board
-const int PIN_LED = 2; // D4 on NodeMCU and WeMos. GPIO2/ADC12 of ESP32. Controls the onboard LED.
 
 // SSID and PW for Config Portal
 String ssid = "ESP_" + String(ESP_getChipId(), HEX);
@@ -490,7 +408,7 @@ void configWiFi(WiFi_STA_IPConfig in_WM_STA_IPconfig)
 
 uint8_t connectMultiWiFi()
 {
-#if ESP32
+
   // For ESP32, this better be 0 to shorten the connect time.
   // For ESP32-S2/C3, must be > 500
   #if ( USING_ESP32_S2 || USING_ESP32_C3 )
@@ -499,10 +417,7 @@ uint8_t connectMultiWiFi()
     // For ESP32 core v1.0.6, must be >= 500
     #define WIFI_MULTI_1ST_CONNECT_WAITING_MS           800L
   #endif
-#else
-  // For ESP8266, this better be 2200 to enable connect the 1st time
-  #define WIFI_MULTI_1ST_CONNECT_WAITING_MS             2200L
-#endif
+
 
 #define WIFI_MULTI_CONNECT_WAITING_MS                   500L
 
@@ -540,7 +455,7 @@ uint8_t connectMultiWiFi()
 
   int i = 0;
   
-  status = wifiMulti.run();
+  //tatus = wifiMulti.run();
   delay(WIFI_MULTI_1ST_CONNECT_WAITING_MS);
 
   while ( ( i++ < 20 ) && ( status != WL_CONNECTED ) )
@@ -562,16 +477,12 @@ uint8_t connectMultiWiFi()
   else
   {
     LOGERROR(F("WiFi not connected"));
-
-    // To avoid unnecessary DRD
-    drd->loop();
   
-#if ESP8266      
-    ESP.reset();
-#else
-    ESP.restart();
-#endif  
+  //  ESP.restart();
+
+
   }
+
 
   return status;
 }
@@ -580,17 +491,7 @@ uint8_t connectMultiWiFi()
 
 void printLocalTime()
 {
-#if ESP8266
-  static time_t now;
-  
-  now = time(nullptr);
-  
-  if ( now > 1451602800 )
-  {
-    Serial.print("Local Date/Time: ");
-    Serial.print(ctime(&now));
-  }
-#else
+
   struct tm timeinfo;
 
   getLocalTime( &timeinfo );
@@ -602,7 +503,7 @@ void printLocalTime()
     Serial.print("Local Date/Time: ");
     Serial.print( asctime( &timeinfo ) );
   }
-#endif
+
 }
 
 #endif
@@ -1039,19 +940,12 @@ void printData(DeviceAddress deviceAddress)
 
 
 void checker();
-#include <TaskScheduler.h>
 Scheduler runner;
 // We create the task indicating that it runs every 500 milliseconds, forever
 Task checkerTask(CHECK_TIME, -1, &checker);
 
 void setup()
 {
-    // We add the task to the task scheduler
-  runner.addTask(checkerTask);
-
-  // We activate the task
-  checkerTask.enable();
-
   // put your setup code here, to run once:
   // initialize the LED digital pin as an output.
   pinMode(PIN_LED, OUTPUT);
@@ -1069,10 +963,11 @@ void setup()
 
   delay(200);
 
-  Serial.print(F("\nStarting Async_ConfigOnDoubleReset using ")); Serial.print(FS_Name);
-  Serial.print(F(" on ")); Serial.println(ARDUINO_BOARD);
-  Serial.println(ESP_ASYNC_WIFIMANAGER_VERSION);
-  Serial.println(ESP_DOUBLE_RESET_DETECTOR_VERSION);
+  // We add the task to the task scheduler
+  runner.addTask(checkerTask);
+
+  // We activate the task
+  checkerTask.enable();
 
   // show the addresses we found on the bus
   Serial.print("Device 0 Address: ");
@@ -1091,7 +986,30 @@ void setup()
   printAlarms(boilerThermometer);
   Serial.println();
 
+  Serial.print("Device 0 Temperature: ");
+  Serial.print(giveTemperature(boilerThermometer));
+  Serial.print("Device 1 Temperature: ");
+  Serial.print(giveTemperature(solarThermometer));
 
+  Wire.setPins(SDA_PIN, SCL_PIN);
+
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+  }
+
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  display.display();
+  display.setRotation(2);
+  
+  // Clear the buffer
+  display.clearDisplay();
+
+  /*Serial.print(F("\nStarting Async_ConfigOnDoubleReset using ")); Serial.print(FS_Name);
+  Serial.print(F(" on ")); Serial.println(ARDUINO_BOARD);
+  Serial.println(ESP_ASYNC_WIFIMANAGER_VERSION);
+  Serial.println(ESP_DOUBLE_RESET_DETECTOR_VERSION);*/
 
 #if defined(ESP_ASYNC_WIFIMANAGER_VERSION_INT)
   if (ESP_ASYNC_WIFIMANAGER_VERSION_INT < ESP_ASYNC_WIFIMANAGER_VERSION_MIN)
@@ -1107,15 +1025,11 @@ void setup()
     FileFS.format();
 
   // Format FileFS if not yet
-#ifdef ESP32
+
   if (!FileFS.begin(true))
-#else
-  if (!FileFS.begin())
-#endif
+
   {
-#ifdef ESP8266
-    FileFS.format();
-#endif
+
 
     Serial.println(F("SPIFFS/LittleFS failed! Already tried formatting."));
   
@@ -1137,14 +1051,14 @@ void setup()
     }
   }
   
-  drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
+  //drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
 
   unsigned long startedAt = millis();
 
   // New in v1.4.0
   initAPIPConfigStruct(WM_AP_IPconfig);
   initSTAIPConfigStruct(WM_STA_IPconfig);
-  //////
+  
 
   //Local intialization. Once its business is done, there is no need to keep it around
   // Use this to default DHCP hostname to ESP8266-XXXXXX or ESP32-XXXXXX
@@ -1223,12 +1137,10 @@ void setup()
     {
       LOGERROR3(F("Current TZ_Name ="), WM_config.TZ_Name, F(", TZ = "), WM_config.TZ);
 
-  #if ESP8266
-      configTime(WM_config.TZ, "pool.ntp.org"); 
-  #else
+
       //configTzTime(WM_config.TZ, "pool.ntp.org" );
       configTzTime(WM_config.TZ, "time.nist.gov", "0.pool.ntp.org", "1.pool.ntp.org");
-  #endif   
+ 
     }
     else
     {
@@ -1243,14 +1155,15 @@ void setup()
     initialConfig = true;
   }
 
-  if (drd->detectDoubleReset())
+  //should be triggerd from extern
+  /*if (drd->detectDoubleReset())
   {
     // DRD, disable timeout.
     ESPAsync_wifiManager.setConfigPortalTimeout(0);
 
     Serial.println(F("Open Config Portal without Timeout: Double Reset Detected"));
     initialConfig = true;
-  }
+  }*/
 
   if (initialConfig)
   {
@@ -1327,12 +1240,10 @@ void setup()
     {
       LOGERROR3(F("Saving current TZ_Name ="), WM_config.TZ_Name, F(", TZ = "), WM_config.TZ);
 
-#if ESP8266
-      configTime(WM_config.TZ, "pool.ntp.org"); 
-#else
+
       //configTzTime(WM_config.TZ, "pool.ntp.org" );
       configTzTime(WM_config.TZ, "time.nist.gov", "0.pool.ntp.org", "1.pool.ntp.org");
-#endif
+
     }
     else
     {
@@ -1389,6 +1300,7 @@ void setup()
     Serial.println(ESPAsync_wifiManager.getStatus(WiFi.status()));
 
 
+
 //regular setup
   
   //webServer.reset();
@@ -1402,14 +1314,18 @@ void setup()
 
 void loop()
 {
+
+  //scanner.Scan();
+	//delay(5000);
+
   // Call the double reset detector loop method every so often,
   // so that it can recognise when the timeout expires.
   // You can also call drd.stop() when you wish to no longer
   // consider the next reset as a double reset.
-  drd->loop();
+  //drd->loop();
 
   // put your main code here, to run repeatedly
-  check_status();
+  //check_status();
 
     // It is necessary to run the runner on each loop
   runner.execute();
@@ -1473,18 +1389,69 @@ void checker()
   sensors.requestTemperatures();
 
   Serial.print("Boiler: ");
-  printTemperature(boilerThermometer);
   boiler_temp = giveTemperature(boilerThermometer);
-  Serial.println();
+  printTemperature(boilerThermometer);
   
-  Serial.print("Solar: ");
-  printTemperature(solarThermometer);
+  
+  Serial.print(" Solar: ");
   solar_temp = giveTemperature(solarThermometer);
-  Serial.println();
+  printTemperature(solarThermometer);
 
-  Serial.print("Feedback: ");
+  Serial.print(" Feedback: ");
   Serial.print( (i_boiler)?"Boiler":"");
   Serial.print( (i_solar)?"Solar":"" );
+  Serial.println();
+
+  //Display control
+
+  display.clearDisplay();
+
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  display.setCursor(0, 0);     // Start at top-left corner
+  display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  if( i_solar || i_boiler)
+  {
+  display.write("Pos: ");
+    if( i_solar )
+    display.write("Solar");
+
+    if( i_boiler )
+    display.write("Boiler");
+  }
+
+  if( q_boiler )
+  display.write("Req: Boiler ");
+
+  if( q_solar )
+  display.write("Req: Solar ");
+
+  char s [20];
+
+  if (q_boiler || q_solar)
+  {
+  display.write("Runtime: ");
+  display.write(printf("%d",runtime * CHECK_TIME/1000));
+  display.write("/");
+  sprintf(s, "%d",valve_config.time);
+  display.write(s);
+  }
+
+  display.setCursor(0, 10);     // Start at top-left corner
+  display.write("Boiler: ");
+  sprintf(s, "%.1f",boiler_temp);
+  display.write( s );
+  display.write(" C\n");
+  display.write("Solar: ");
+  sprintf(s, "%.1f",solar_temp);
+  display.write(s);
+  display.write(" C");
+  
+
+
+  display.display();
+  
 
 }
 

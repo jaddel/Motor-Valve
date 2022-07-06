@@ -103,7 +103,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
-const char WM_HTTP_HEAD_CFG[] PROGMEM     = "<!DOCTYPE html><html lang='en'><head><meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'/><META HTTP-EQUIV='refresh' CONTENT='1; URL=?' /><title>{v}</title>";
+const char WM_HTTP_HEAD_CFG[] PROGMEM     = "<!DOCTYPE html><html lang='en'><head><meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'/><META HTTP-EQUIV='refresh' CONTENT='10; URL=?' /><title>{v}</title>";
 
 //Ported to ESP32
 

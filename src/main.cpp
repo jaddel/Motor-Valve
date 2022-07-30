@@ -423,7 +423,7 @@ uint8_t connectMultiWiFi()
 
   uint8_t status;
 
-  //WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_STA);
 
   LOGERROR(F("ConnectMultiWiFi with :"));
 
@@ -453,24 +453,26 @@ uint8_t connectMultiWiFi()
   //////
 #endif
 
-  int i = 0;
+  //int i = 0;
   
-  //tatus = wifiMulti.run();
-  delay(WIFI_MULTI_1ST_CONNECT_WAITING_MS);
+  status = wifiMulti.run();
+  //delay(WIFI_MULTI_1ST_CONNECT_WAITING_MS);
 
-  while ( ( i++ < 20 ) && ( status != WL_CONNECTED ) )
-  {
+  //while ( ( i++ < 20 ) && ( status != WL_CONNECTED ) )
+  //{
     status = WiFi.status();
 
-    if ( status == WL_CONNECTED )
-      break;
-    else
-      delay(WIFI_MULTI_CONNECT_WAITING_MS);
-  }
+    //if ( status == WL_CONNECTED )
+      //break;
+    //else
+      //delay(WIFI_MULTI_CONNECT_WAITING_MS);
+
+  //}
 
   if ( status == WL_CONNECTED )
   {
-    LOGERROR1(F("WiFi connected after time: "), i);
+    //LOGERROR1(F("WiFi connected after time: "), i);
+    LOGERROR0(F("WiFi connected "));
     LOGERROR3(F("SSID:"), WiFi.SSID(), F(",RSSI="), WiFi.RSSI());
     LOGERROR3(F("Channel:"), WiFi.channel(), F(",IP address:"), WiFi.localIP() );
   }
@@ -956,19 +958,44 @@ void setup()
   pinMode(FEEDBACK_SOLAR, INPUT_PULLUP);   
 
   digitalWrite( RELAIS_BOILER, RLY_OFF );
-  digitalWrite( FEEDBACK_SOLAR, RLY_OFF );
+  digitalWrite( RELAIS_SOLAR, RLY_OFF );
+
+  Wire.setPins(SDA_PIN, SCL_PIN);
 
   Serial.begin(115200);
   while (!Serial);
 
   delay(200);
 
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+  }
+
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  display.display();
+  display.setRotation(2);
+  
+  // Clear the buffer
+  display.clearDisplay();
+
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  display.setCursor(0, 0);     // Start at top-left corner
+  display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  display.write("MotorValve booting \n");
+  display.display();
+  
   // We add the task to the task scheduler
   runner.addTask(checkerTask);
 
   // We activate the task
   checkerTask.enable();
 
+  display.write("Start Thermometer... \n");
+  display.display();
   // show the addresses we found on the bus
   Serial.print("Device 0 Address: ");
   printAddress(solarThermometer);
@@ -991,20 +1018,6 @@ void setup()
   Serial.print("Device 1 Temperature: ");
   Serial.print(giveTemperature(solarThermometer));
 
-  Wire.setPins(SDA_PIN, SCL_PIN);
-
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-  }
-
-  // Show initial display buffer contents on the screen --
-  // the library initializes this with an Adafruit splash screen.
-  display.display();
-  display.setRotation(2);
-  
-  // Clear the buffer
-  display.clearDisplay();
 
   /*Serial.print(F("\nStarting Async_ConfigOnDoubleReset using ")); Serial.print(FS_Name);
   Serial.print(F(" on ")); Serial.println(ARDUINO_BOARD);
@@ -1021,6 +1034,8 @@ void setup()
 
   Serial.setDebugOutput(false);
 
+  display.write("Init LittleFS... \n");
+  display.display();
   if (FORMAT_FILESYSTEM)
     FileFS.format();
 
@@ -1051,6 +1066,9 @@ void setup()
     }
   }
   
+  display.write("Init Wifi... \n");
+  display.display();
+
   //drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
 
   unsigned long startedAt = millis();
@@ -1314,18 +1332,11 @@ void setup()
 
 void loop()
 {
-
-  //scanner.Scan();
-	//delay(5000);
-
   // Call the double reset detector loop method every so often,
   // so that it can recognise when the timeout expires.
   // You can also call drd.stop() when you wish to no longer
   // consider the next reset as a double reset.
   //drd->loop();
-
-  // put your main code here, to run repeatedly
-  //check_status();
 
     // It is necessary to run the runner on each loop
   runner.execute();
@@ -1411,46 +1422,77 @@ void checker()
   display.setCursor(0, 0);     // Start at top-left corner
   display.cp437(true);         // Use full 256 char 'Code Page 437' font
 
-  if( i_solar || i_boiler)
+  if( q_solar || q_boiler)
   {
-  display.write("Pos: ");
+    //display.write("Pos ");
+    if( q_boiler )
+      display.write("Boiler ");
+
+    if( q_solar )
+      display.write("Solar ");
+
+    display.write("targeted");
+  }
+  else if( i_solar ^ i_boiler)
+  {
+    display.write("Position ");
     if( i_solar )
-    display.write("Solar");
+      display.write("Solar ");
 
     if( i_boiler )
-    display.write("Boiler");
+      display.write("Boiler ");
+
+    //display.write("reached");
   }
-
-  if( q_boiler )
-  display.write("Req: Boiler ");
-
-  if( q_solar )
-  display.write("Req: Solar ");
-
+  else
+    display.write("Unknown position");
+  
   char s [20];
 
   if (q_boiler || q_solar)
   {
-  display.write("Runtime: ");
-  display.write(printf("%d",runtime * CHECK_TIME/1000));
+  display.write("\nRuntime: ");
+  sprintf(s, "%d",runtime * CHECK_TIME/1000);
+  display.write(s);
   display.write("/");
   sprintf(s, "%d",valve_config.time);
   display.write(s);
   }
+  display.write("\n");
 
-  display.setCursor(0, 10);     // Start at top-left corner
-  display.write("Boiler: ");
+  // 2nd line
+  //display.setCursor(0, 8);     
+  display.write("Boi:");
   sprintf(s, "%.1f",boiler_temp);
   display.write( s );
-  display.write(" C\n");
-  display.write("Solar: ");
+  display.write("C ");
+
+  // 3rd line
+  display.write("Sol:");
   sprintf(s, "%.1f",solar_temp);
   display.write(s);
-  display.write(" C");
-  
+  display.write("C\n");
+
+  // 4rd line
+  uint8_t status;
+    
+  status = WiFi.status();
+  display.write("Wifi ");
+  display.write(WM_config.WiFi_Creds->wifi_ssid );
+  display.write(": ");
+
+  if ( status == WL_CONNECTED )
+    display.write("good");
+  else
+    display.write("bad");
 
 
   display.display();
+
+  if (!q_boiler && !q_solar)
+  {
+    check_status();
+  }
   
 
 }

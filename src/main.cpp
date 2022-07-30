@@ -66,6 +66,7 @@
 #define FEEDBACK_SOLAR 14
 #define SDA_PIN 21
 #define SCL_PIN 17
+#define BUTTON_PIN 23
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
@@ -86,6 +87,11 @@ bool i_boiler;
 bool i_solar;
 bool q_boiler = false;
 bool q_solar = false;
+bool button_state = false;
+bool last_button_state = false;
+uint16_t menue_select = 0;
+uint16_t button_time = 0;
+uint8_t wificheck = 0;
 
 bool manual_mode = false;
 uint16_t runtime = 0;
@@ -340,6 +346,10 @@ IPAddress APStaticSN  = IPAddress(255, 255, 255, 0);
 //Webserver for later
 AsyncWebServer webServer(HTTP_PORT);
 
+DNSServer dnsServer;
+
+ESPAsync_WiFiManager ESPAsync_wifiManager(&webServer, &dnsServer, "AsyncConfigOnDoubleReset");
+
 ///////////////////////////////////////////
 // New in v1.4.0
 /******************************************
@@ -452,38 +462,9 @@ uint8_t connectMultiWiFi()
   configWiFi(WM_STA_IPconfig);
   //////
 #endif
-
-  //int i = 0;
   
   status = wifiMulti.run();
-  //delay(WIFI_MULTI_1ST_CONNECT_WAITING_MS);
 
-  //while ( ( i++ < 20 ) && ( status != WL_CONNECTED ) )
-  //{
-    status = WiFi.status();
-
-    //if ( status == WL_CONNECTED )
-      //break;
-    //else
-      //delay(WIFI_MULTI_CONNECT_WAITING_MS);
-
-  //}
-
-  if ( status == WL_CONNECTED )
-  {
-    //LOGERROR1(F("WiFi connected after time: "), i);
-    LOGERROR0(F("WiFi connected "));
-    LOGERROR3(F("SSID:"), WiFi.SSID(), F(",RSSI="), WiFi.RSSI());
-    LOGERROR3(F("Channel:"), WiFi.channel(), F(",IP address:"), WiFi.localIP() );
-  }
-  else
-  {
-    LOGERROR(F("WiFi not connected"));
-  
-  //  ESP.restart();
-
-
-  }
 
 
   return status;
@@ -941,6 +922,8 @@ void printData(DeviceAddress deviceAddress)
 }
 
 
+
+
 void checker();
 Scheduler runner;
 // We create the task indicating that it runs every 500 milliseconds, forever
@@ -956,6 +939,7 @@ void setup()
   pinMode(RELAIS_SOLAR, OUTPUT);     
   pinMode(FEEDBACK_BOILER, INPUT_PULLUP);   
   pinMode(FEEDBACK_SOLAR, INPUT_PULLUP);   
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   digitalWrite( RELAIS_BOILER, RLY_OFF );
   digitalWrite( RELAIS_SOLAR, RLY_OFF );
@@ -1084,13 +1068,11 @@ void setup()
   // Use this to personalize DHCP hostname (RFC952 conformed)
  // AsyncWebServer webServer(HTTP_PORT);
 
-#if ( USING_ESP32_S2 || USING_ESP32_C3 )
-  ESPAsync_WiFiManager ESPAsync_wifiManager(&webServer, NULL, "AsyncConfigOnDoubleReset");
-#else
-  DNSServer dnsServer;
 
-  ESPAsync_WiFiManager ESPAsync_wifiManager(&webServer, &dnsServer, "AsyncConfigOnDoubleReset");
-#endif
+  //DNSServer dnsServer;
+
+  //ESPAsync_WiFiManager ESPAsync_wifiManager(&webServer, &dnsServer, "AsyncConfigOnDoubleReset");
+
 
 #if USE_CUSTOM_AP_IP
   //set custom ip for portal
@@ -1300,7 +1282,34 @@ void setup()
     {
       Serial.println(F("ConnectMultiWiFi in setup"));
 
-      connectMultiWiFi();
+      uint8_t status = connectMultiWiFi();
+
+        delay(WIFI_MULTI_1ST_CONNECT_WAITING_MS);
+
+        uint8_t i;
+        while ( ( i++ < 20 ) && ( status != WL_CONNECTED ) )
+        {
+          status = WiFi.status();
+
+          if ( status == WL_CONNECTED )
+            break;
+          else
+            delay(WIFI_MULTI_CONNECT_WAITING_MS);
+
+        }
+
+        if ( status == WL_CONNECTED )
+        {
+          LOGERROR1(F("WiFi connected after time: "), i);
+          LOGERROR0(F("WiFi connected "));
+          LOGERROR3(F("SSID:"), WiFi.SSID(), F(",RSSI="), WiFi.RSSI());
+          LOGERROR3(F("Channel:"), WiFi.channel(), F(",IP address:"), WiFi.localIP() );
+        }
+        else
+        {
+          LOGERROR(F("WiFi not connected"));
+          //  ESP.restart(); //Too much!
+        }
     }
 
   }
@@ -1345,6 +1354,8 @@ void loop()
   i_boiler = digitalRead(FEEDBACK_BOILER);
   i_solar = digitalRead(FEEDBACK_SOLAR);
 
+  button_state = !digitalRead(BUTTON_PIN);
+
   //Switch logic
   if(!manual_mode)
   {
@@ -1376,8 +1387,6 @@ void loop()
     q_solar = false; //reset solar actuator
   }
 
-
-
   //Interlock
   if(q_boiler && !q_solar)
     digitalWrite( RELAIS_BOILER, RLY_ON );
@@ -1388,12 +1397,156 @@ void loop()
     digitalWrite( RELAIS_SOLAR, RLY_ON );
   else
     digitalWrite( RELAIS_SOLAR, RLY_OFF ); 
+
+  //Button management
+    if(button_time > 1500)
+    {
+      if (menue_select == 1) //stopp all
+      {
+        manual_mode = 0;
+        menue_select = 0;
+      }
+      else if (menue_select == 2)
+      {
+        manual_mode = 1;
+        q_boiler = 1;
+        q_solar = 0;
+        menue_select = 0;
+      }
+      else if (menue_select == 3)
+      {
+        manual_mode = 1;
+        q_boiler = 0;
+        q_solar = 1;
+        menue_select = 0;
+      }
+      else if (menue_select == 5)
+      {
+          display.clearDisplay();
+          display.setCursor(0, 0);     // Start at top-left corner
+          display.write("Open Wifi AP\n");
+          display.write("192.168.4.1\n");
+          display.write("SSID=");
+          display.write(ssid.c_str());
+          display.write("\n");
+          display.write("PWD=");
+          display.write(password.c_str());
+          display.display();
+
+          digitalWrite(PIN_LED, LED_ON); // turn the LED on by making the voltage LOW to tell us we are in configuration mode.
+
+
+          // Starts an access point
+          if (!ESPAsync_wifiManager.startConfigPortal((const char *) ssid.c_str(), password.c_str()))
+            Serial.println(F("Not connected to WiFi but continuing anyway."));
+          else
+          {
+            Serial.println(F("WiFi connected...yeey :)"));
+          }
+
+          // Stored  for later usage, from v1.1.0, but clear first
+          memset(&WM_config, 0, sizeof(WM_config));
+
+          for (uint8_t i = 0; i < NUM_WIFI_CREDENTIALS; i++)
+          {
+            String tempSSID = ESPAsync_wifiManager.getSSID(i);
+            String tempPW   = ESPAsync_wifiManager.getPW(i);
+
+            if (strlen(tempSSID.c_str()) < sizeof(WM_config.WiFi_Creds[i].wifi_ssid) - 1)
+              strcpy(WM_config.WiFi_Creds[i].wifi_ssid, tempSSID.c_str());
+            else
+              strncpy(WM_config.WiFi_Creds[i].wifi_ssid, tempSSID.c_str(), sizeof(WM_config.WiFi_Creds[i].wifi_ssid) - 1);
+
+            if (strlen(tempPW.c_str()) < sizeof(WM_config.WiFi_Creds[i].wifi_pw) - 1)
+              strcpy(WM_config.WiFi_Creds[i].wifi_pw, tempPW.c_str());
+            else
+              strncpy(WM_config.WiFi_Creds[i].wifi_pw, tempPW.c_str(), sizeof(WM_config.WiFi_Creds[i].wifi_pw) - 1);
+
+            // Don't permit NULL SSID and password len < MIN_AP_PASSWORD_SIZE (8)
+            if ( (String(WM_config.WiFi_Creds[i].wifi_ssid) != "") && (strlen(WM_config.WiFi_Creds[i].wifi_pw) >= MIN_AP_PASSWORD_SIZE) )
+            {
+              LOGERROR3(F("* Add SSID = "), WM_config.WiFi_Creds[i].wifi_ssid, F(", PW = "), WM_config.WiFi_Creds[i].wifi_pw );
+              wifiMulti.addAP(WM_config.WiFi_Creds[i].wifi_ssid, WM_config.WiFi_Creds[i].wifi_pw);
+            }
+          }
+          // New in v1.4.0
+          ESPAsync_wifiManager.getSTAStaticIPConfig(WM_STA_IPconfig);
+          //////
+
+          saveConfigData();
+
+        ESP.restart();
+
+      }
+      else if (menue_select == 4 || menue_select == 8)
+      {
+        menue_select = 0;
+      }
+    }
+    else if (!button_state && last_button_state)
+    {
+      //short press
+      menue_select ++;
+      if(menue_select > 8)
+      menue_select = 1;
+    }
+
+  //Config Menue
+  if(menue_select > 0)
+  {
+  //Display control
+
+  display.clearDisplay();
+
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  display.setCursor(0, 0);     // Start at top-left corner
+  display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  //display.write("Config Menue\n");
+  if(menue_select <= 4 )
+  {
+  if(menue_select == 1) display.write(0x10); else display.write(" ");
+  display.write("1: Automatic mode\n");
+  if(menue_select == 2) display.write(0x10); else display.write(" ");
+  display.write("2: manual Boiler\n");
+  if(menue_select == 3) display.write(0x10); else display.write(" ");
+  display.write("3: manual Solar\n");
+  if(menue_select == 4) display.write(0x10); else display.write(" ");
+  display.write("4: Exit\n");
+  }
+  else
+  {
+  if(menue_select == 5) display.write(0x10); else display.write(" ");
+  display.write("5: Wifi config\n");
+  if(menue_select == 6) display.write(0x10); else display.write(" ");
+  display.write("6: \n");
+  if(menue_select == 7) display.write(0x10); else display.write(" ");
+  display.write("7: \n");
+  if(menue_select == 8) display.write(0x10); else display.write(" ");
+  display.write("8: Exit\n");
+  }
+
+  display.display();
+
+  }
+
+  //Button management
+  last_button_state = button_state;
+
+  if(!button_state)
+    button_time = 0;
+
 }
 
 //periodical checker
 void checker()
 {
 
+  if(button_state)
+    button_time += CHECK_TIME;
+  
+  
   if( (q_boiler || q_solar) && (runtime * CHECK_TIME) / 1000 <= valve_config.time)
   runtime++;
 
@@ -1413,6 +1566,9 @@ void checker()
   Serial.print( (i_solar)?"Solar":"" );
   Serial.println();
 
+
+  if(menue_select == 0)
+  {
   //Display control
 
   display.clearDisplay();
@@ -1474,26 +1630,53 @@ void checker()
   display.write("C\n");
 
   // 4rd line
-  uint8_t status;
-    
-  status = WiFi.status();
   display.write("Wifi ");
-  display.write(WM_config.WiFi_Creds->wifi_ssid );
+  display.write(WM_config.WiFi_Creds[0].wifi_ssid);
   display.write(": ");
 
-  if ( status == WL_CONNECTED )
-    display.write("good");
-  else
-    display.write("bad");
-
-
-  display.display();
-
-  if (!q_boiler && !q_solar)
+  if (!q_boiler && !q_solar && !button_state && menue_select == 0 && wificheck == 0)
   {
     check_status();
+    wificheck = 30;
+  }
+        uint8_t status;
+        
+        if(wificheck > 0)
+        {
+          wificheck--;
+          status = WiFi.status();
+
+          if ( status == WL_CONNECTED )
+          {
+            wificheck = 0;
+            display.write("good");
+          }
+          else
+            display.write("bad");
+
+        }
+
+        if ( status == WL_CONNECTED )
+        {
+          LOGERROR1(F("WiFi connected after time: "), 20-wificheck);
+          LOGERROR0(F("WiFi connected "));
+          LOGERROR3(F("SSID:"), WiFi.SSID(), F(",RSSI="), WiFi.RSSI());
+          LOGERROR3(F("Channel:"), WiFi.channel(), F(",IP address:"), WiFi.localIP() );
+        }
+        else
+        {
+          LOGERROR1(F("WiFi not connected "), wificheck);
+        }
+  
+
   }
   
+  display.display();
+
+
+
+
+
 
 }
 

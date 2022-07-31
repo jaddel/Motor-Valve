@@ -1407,7 +1407,7 @@ void loop()
 
   //Button management
     if(button_time > 1500)
-    { menue_select = 5;
+    { //menue_select = 5; //only for debug
       if (menue_select == 1) //stopp all
       {
         manual_mode = 0;

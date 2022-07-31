@@ -595,7 +595,7 @@ bool loadConfigData()
     if ( WM_config.checksum != calcChecksum( (uint8_t*) &WM_config, sizeof(WM_config) - sizeof(WM_config.checksum) ) )
     {
       LOGERROR(F("WM_config checksum wrong"));
-      
+
       return false;
     }
     
@@ -1050,7 +1050,7 @@ void setup()
     }
   }
   
-  display.write("Init Wifi... \n");
+  display.write("Init Wifi");
   display.display();
 
   //drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
@@ -1101,7 +1101,7 @@ void setup()
 #endif
 
   // We can't use WiFi.SSID() in ESP32 as it's only valid after connected.
-  // SSID and Password stored in ESP32 wifi_ap_record_t and wifi_config_t are also cleared in reboot
+  // SSID and Password stored in is wifi_ap_record_t and wifi_config_t are also cleared in reboot
   // Have to create a new function to store in EEPROM/SPIFFS for this purpose
   Router_SSID = ESPAsync_wifiManager.WiFi_SSID();
   Router_Pass = ESPAsync_wifiManager.WiFi_Pass();
@@ -1165,9 +1165,9 @@ void setup()
     initialConfig = true;
   }*/
 
-  if (initialConfig)
+  if (initialConfig )
   {
-    Serial.print(F("Starting configuration portal @ "));
+    /*Serial.print(F("Starting configuration portal @ "));
     
 #if USE_CUSTOM_AP_IP    
     Serial.print(APStaticIP);
@@ -1194,10 +1194,10 @@ void setup()
     {
       Serial.println(F("WiFi connected...yeey :)"));
     }
-
+*/
     // Stored  for later usage, from v1.1.0, but clear first
     memset(&WM_config, 0, sizeof(WM_config));
-
+/*
     for (uint8_t i = 0; i < NUM_WIFI_CREDENTIALS; i++)
     {
       String tempSSID = ESPAsync_wifiManager.getSSID(i);
@@ -1256,6 +1256,7 @@ void setup()
     //////
 
     saveConfigData();
+    */
   }
 
   digitalWrite(PIN_LED, LED_OFF); // Turn led off as we are not in configuration mode.
@@ -1267,6 +1268,9 @@ void setup()
     // Load stored data, the addAP ready for MultiWiFi reconnection
     if (!configDataLoaded)
       loadConfigData();
+
+      display.write(".");
+      display.display();
 
     for (uint8_t i = 0; i < NUM_WIFI_CREDENTIALS; i++)
     {
@@ -1289,6 +1293,9 @@ void setup()
         uint8_t i;
         while ( ( i++ < 20 ) && ( status != WL_CONNECTED ) )
         {
+          display.write(".");
+          display.display();
+
           status = WiFi.status();
 
           if ( status == WL_CONNECTED )
@@ -1400,7 +1407,7 @@ void loop()
 
   //Button management
     if(button_time > 1500)
-    {
+    { menue_select = 5;
       if (menue_select == 1) //stopp all
       {
         manual_mode = 0;
@@ -1422,6 +1429,10 @@ void loop()
       }
       else if (menue_select == 5)
       {
+          //Disable Motor. No Program active now!
+          digitalWrite( RELAIS_BOILER, RLY_OFF );
+          digitalWrite( RELAIS_SOLAR, RLY_OFF );
+
           display.clearDisplay();
           display.setCursor(0, 0);     // Start at top-left corner
           display.write("Open Wifi AP\n");
@@ -1435,6 +1446,13 @@ void loop()
 
           digitalWrite(PIN_LED, LED_ON); // turn the LED on by making the voltage LOW to tell us we are in configuration mode.
 
+          Serial.println("before");
+          for (uint8_t i = 0; i < NUM_WIFI_CREDENTIALS; i++)
+          {  
+            Serial.println(WM_config.WiFi_Creds[i].wifi_ssid);
+            Serial.println(WM_config.WiFi_Creds[i].wifi_pw);
+            
+          }
 
           // Starts an access point
           if (!ESPAsync_wifiManager.startConfigPortal((const char *) ssid.c_str(), password.c_str()))
@@ -1445,8 +1463,11 @@ void loop()
           }
 
           // Stored  for later usage, from v1.1.0, but clear first
-          memset(&WM_config, 0, sizeof(WM_config));
+          //memset(&WM_config, 0, sizeof(WM_config)); //would delete data.
+          //WM_config is already filled in setup
 
+          if(strlen(ESPAsync_wifiManager.getSSID(0).c_str()) > 0) //There must be data.
+          {
           for (uint8_t i = 0; i < NUM_WIFI_CREDENTIALS; i++)
           {
             String tempSSID = ESPAsync_wifiManager.getSSID(i);
@@ -1469,14 +1490,34 @@ void loop()
               wifiMulti.addAP(WM_config.WiFi_Creds[i].wifi_ssid, WM_config.WiFi_Creds[i].wifi_pw);
             }
           }
+
           // New in v1.4.0
           ESPAsync_wifiManager.getSTAStaticIPConfig(WM_STA_IPconfig);
           //////
 
+
           saveConfigData();
+          }
+          
 
+          
+          Serial.println("after");
+          for (uint8_t i = 0; i < NUM_WIFI_CREDENTIALS; i++)
+          {  
+            Serial.println(WM_config.WiFi_Creds[i].wifi_ssid);
+            Serial.println(WM_config.WiFi_Creds[i].wifi_pw);
+          }
+
+          digitalWrite(PIN_LED, LED_OFF);
+
+        //ESP.restart(); //Best option
+
+        menue_select = 0;
+
+      }
+      else if (menue_select == 6)
+      {
         ESP.restart();
-
       }
       else if (menue_select == 4 || menue_select == 8)
       {
@@ -1520,7 +1561,7 @@ void loop()
   if(menue_select == 5) display.write(0x10); else display.write(" ");
   display.write("5: Wifi config\n");
   if(menue_select == 6) display.write(0x10); else display.write(" ");
-  display.write("6: \n");
+  display.write("6: Reboot\n");
   if(menue_select == 7) display.write(0x10); else display.write(" ");
   display.write("7: \n");
   if(menue_select == 8) display.write(0x10); else display.write(" ");
@@ -1631,7 +1672,7 @@ void checker()
 
   // 4rd line
   display.write("Wifi ");
-  display.write(WM_config.WiFi_Creds[0].wifi_ssid);
+  display.write(WiFi.SSID().c_str());
   display.write(": ");
 
   if (!q_boiler && !q_solar && !button_state && menue_select == 0 && wificheck == 0)
@@ -1639,34 +1680,44 @@ void checker()
     check_status();
     wificheck = 30;
   }
-        uint8_t status;
-        
-        if(wificheck > 0)
-        {
-          wificheck--;
-          status = WiFi.status();
-
-          if ( status == WL_CONNECTED )
+      if (!initialConfig)
           {
-            wificheck = 0;
-            display.write("good");
+            uint8_t status;
+        
+            if(wificheck > 0)
+            {
+              wificheck--;
+            }
+
+              status = WiFi.status();
+
+              if (status == WL_CONNECTED )
+              {
+                wificheck = 0;
+                display.write("good");
+              }
+              else
+                display.write("bad");
+
+            
+
+            if ( status == WL_CONNECTED )
+            {
+              LOGERROR1(F("WiFi connected after time: "), 20-wificheck);
+              LOGERROR0(F("WiFi connected "));
+              LOGERROR3(F("SSID:"), WiFi.SSID(), F(",RSSI="), WiFi.RSSI());
+              LOGERROR3(F("Channel:"), WiFi.channel(), F(",IP address:"), WiFi.localIP() );
+            }
+            else
+            {
+              LOGERROR1(F("WiFi not connected "), wificheck);
+            }
+
+            
+
           }
           else
-            display.write("bad");
-
-        }
-
-        if ( status == WL_CONNECTED )
-        {
-          LOGERROR1(F("WiFi connected after time: "), 20-wificheck);
-          LOGERROR0(F("WiFi connected "));
-          LOGERROR3(F("SSID:"), WiFi.SSID(), F(",RSSI="), WiFi.RSSI());
-          LOGERROR3(F("Channel:"), WiFi.channel(), F(",IP address:"), WiFi.localIP() );
-        }
-        else
-        {
-          LOGERROR1(F("WiFi not connected "), wificheck);
-        }
+              display.write("no conf");
   
 
   }

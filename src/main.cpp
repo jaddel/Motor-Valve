@@ -97,9 +97,10 @@ bool manual_mode = false;
 uint16_t runtime = 0;
 
 // arrays to hold device addresses
-DeviceAddress solarThermometer = { 0x28, 0x39, 0x24, 0xEB, 0x4C, 0x20, 0x1, 0x4A }; //blue mark on device
-DeviceAddress boilerThermometer = { 0x28, 0xCB, 0x2B, 0x28, 0x37, 0x19, 0x1, 0x39 }; //red mark on devide
-
+DeviceAddress solarThermometer = { 0x28, 0x53, 0xB7, 0x99, 0xA0, 0x21, 0x1, 0xA8 }; //blue mark on device
+DeviceAddress boilerThermometer = { 0x28, 0xFF, 0x64, 0x1E, 0x85, 0xEB, 0xD2, 0x81 }; //red mark on devide
+// # ROM = 28 53 B7 99 A0 21 1 A8
+// # ROM = 28 FF 64 1E 85 EB D2 81
 //Display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 

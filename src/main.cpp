@@ -349,7 +349,8 @@ AsyncWebServer webServer(HTTP_PORT);
 
 DNSServer dnsServer;
 
-ESPAsync_WiFiManager ESPAsync_wifiManager(&webServer, &dnsServer, "AsyncConfigOnDoubleReset");
+String s = "MotorValve " + String(ESP_getChipId(), HEX);
+ESPAsync_WiFiManager ESPAsync_wifiManager(&webServer, &dnsServer, s.c_str());
 
 ///////////////////////////////////////////
 // New in v1.4.0
